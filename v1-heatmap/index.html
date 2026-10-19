@@ -1,0 +1,1999 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>听觉方位球</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
+<style>
+/* 布局：左侧是可拖动的 3D 听觉球（主角），右侧是“重放系统阶梯 + 读数”面板；手机上上下堆叠。
+   配色沿用全景声图版：墨黑、骨白、信号橙（准 / 提升），冷灰蓝（模糊 / 缺口）。 */
+:root {
+  --bg: #0b0b0c;
+  --surface: #131315;
+  --raise: #1c1c1f;
+  --line: rgba(238, 233, 223, 0.14);
+  --fg: #eee9df;
+  --dim: #9c978f;
+  --accent: #ff5a1f;
+  --accent-2: #ff9a57;
+  --cool: #6f8aa6;
+  --font-display: "Archivo", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f1f0ed;
+    --surface: #e8e6e1;
+    --raise: #ffffff;
+    --line: rgba(20, 20, 22, 0.14);
+    --fg: #151517;
+    --dim: #67635c;
+    --accent: #d2400c;
+    --accent-2: #e2702c;
+    --cool: #5d7896;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f1f0ed;
+  --surface: #e8e6e1;
+  --raise: #ffffff;
+  --line: rgba(20, 20, 22, 0.14);
+  --fg: #151517;
+  --dim: #67635c;
+  --accent: #d2400c;
+  --accent-2: #e2702c;
+  --cool: #5d7896;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.wrap {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 40px;
+  display: grid;
+  gap: 22px;
+}
+header { display: grid; gap: 6px; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+h1 {
+  margin: 0;
+  font-weight: 900;
+  font-size: clamp(30px, 5vw, 52px);
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+.lede { margin: 0; color: var(--dim); max-width: 72ch; }
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1000px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* 舞台 */
+.stage {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 45%, var(--surface) 0%, var(--bg) 72%);
+  aspect-ratio: 5 / 4;
+  max-width: 100%;
+  overflow: hidden;
+}
+canvas#view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+}
+canvas#view:active { cursor: grabbing; }
+canvas#view:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.hud {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  pointer-events: none;
+}
+.hud.top { top: 12px; justify-content: space-between; align-items: flex-start; }
+.hud.bottom { bottom: 12px; justify-content: space-between; align-items: flex-end; }
+.hud > * { pointer-events: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip, .seg button {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border: 1px solid var(--line);
+  padding: 5px 11px;
+  cursor: pointer;
+  border-radius: 999px;
+}
+.chip[aria-pressed="true"] { color: var(--fg); border-color: var(--accent); }
+.chip[aria-pressed="true"]::before { content: "● "; color: var(--accent); font-size: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--bg) 80%, transparent); padding: 2px; }
+.seg button { border: 0; background: transparent; padding: 4px 12px; }
+.seg button[aria-checked="true"] { background: var(--accent); color: var(--bg); }
+.chip:focus-visible, .seg button:focus-visible, .sys:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+#base-wrap, #part-wrap { display: inline-flex; gap: 6px; align-items: center; }
+.chip[aria-disabled="true"] { opacity: 0.4; }
+.part-only { display: none; }
+:root[data-mode="part"] .kv .part-only { display: block; }
+.legend {
+  display: grid;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  pointer-events: none;
+  max-width: 260px;
+}
+.ramp { width: 200px; max-width: 100%; height: 8px; }
+.ramp-labels { display: flex; justify-content: space-between; gap: 8px; }
+.sys-tag {
+  font-family: var(--font-display);
+  font-stretch: 72%;
+  font-weight: 900;
+  font-size: clamp(26px, 4vw, 44px);
+  line-height: 1;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  padding: 6px 10px 8px;
+  pointer-events: none;
+  max-width: 70%;
+  white-space: nowrap;
+}
+.sys-tag small {
+  display: block;
+  font-family: var(--font-mono);
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  margin-top: 6px;
+}
+
+/* 面板 */
+.panel { display: grid; gap: 16px; min-width: 0; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.card h2 {
+  margin: 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ladder { display: grid; gap: 3px; }
+.sys {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr) 76px 3.2em;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.sys:hover { border-color: var(--line); }
+.sys[aria-checked="true"] { border-color: var(--accent); background: var(--raise); }
+.sys .kind { font-family: var(--font-mono); font-size: 10px; color: var(--dim); text-align: center; border: 1px solid var(--line); line-height: 1.5; }
+.sys .kind.hp { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); }
+.sys .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sys .bar { height: 6px; background: color-mix(in srgb, var(--fg) 10%, transparent); position: relative; }
+.sys .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.sys .pct { font-family: var(--font-mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.summary { margin: 0; font-size: 13px; color: var(--dim); }
+.summary b { color: var(--fg); font-weight: 600; }
+
+.dirline { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.big {
+  font-family: var(--font-display);
+  font-stretch: 70%;
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.big.hot { color: var(--accent); }
+.big small {
+  font-family: var(--font-mono);
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  margin-left: 4px;
+}
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+.kv dt { color: var(--dim); font-size: 13px; }
+.kv dd { margin: 0; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 0; }
+.kv dd.hot { color: var(--accent); }
+.kv dd.cool { color: var(--cool); }
+.cmp { display: grid; gap: 4px; }
+.cmp .row { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 4em; gap: 8px; align-items: center; font-size: 12px; color: var(--dim); }
+.cmp .track { height: 8px; background: color-mix(in srgb, var(--fg) 8%, transparent); position: relative; }
+.cmp .track i { position: absolute; inset: 0 auto 0 0; }
+.cmp .row span:last-child { text-align: right; font-family: var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.note { margin: 0; font-size: 14px; }
+.note.dim { color: var(--dim); font-size: 13px; }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--raise);
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.slider { display: grid; grid-template-columns: 3.5em 1fr 4.2em; gap: 10px; align-items: center; }
+.slider label { font-size: 13px; color: var(--dim); }
+.slider output { font-family: var(--font-mono); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+svg#itd { width: 100%; height: auto; display: block; }
+svg#itd .axis { stroke: var(--line); stroke-width: 1; fill: none; }
+svg#itd .curve { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+svg#itd .fold { stroke: var(--dim); stroke-dasharray: 3 4; stroke-width: 1; }
+svg#itd .same { stroke: var(--accent); stroke-dasharray: 4 4; stroke-width: 1.2; fill: none; }
+svg#itd .dot { fill: var(--accent); }
+svg#itd .ghost { fill: var(--bg); stroke: var(--accent); stroke-width: 1.6; }
+svg#itd text { fill: var(--dim); font-family: var(--font-mono); font-size: 10px; }
+
+footer {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  display: grid;
+  gap: 8px;
+  color: var(--dim);
+  font-size: 13px;
+  max-width: 96ch;
+}
+footer p { margin: 0; }
+footer a { color: var(--fg); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+@media (max-width: 640px) {
+  .stage { aspect-ratio: 1 / 1.4; }
+  .chip, .seg button { font-size: 12px; padding: 3px 8px; }
+  .legend { display: none; }
+  .sys-tag { font-size: 22px; padding: 4px 8px 6px; }
+  .sys-tag small { font-size: 10px; margin-top: 4px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Binaural localization · playback systems</div>
+    <h1>听觉方位球</h1>
+    <p class="lede">中间是带两只耳朵的头，外面是“声音可能来的方向”。先看人耳天然能分辨多准，再选一套音箱或耳机，看它把每个方向还原成什么样：声像被挪到哪、变得多模糊，以及和人耳天然、和上一级相比差在哪里、强在哪里。</p>
+  </header>
+
+  <main class="grid">
+    <section class="stage" aria-label="三维听觉方位球">
+      <canvas id="view" tabindex="0" role="img" aria-label="以人头为中心的球面，显示所选重放系统在各方向上的定位精度。用方向键旋转视角。"></canvas>
+      <div class="hud top">
+        <div class="chips">
+          <div class="seg" role="radiogroup" aria-label="显示">
+            <button role="radio" aria-checked="false" data-view="nat">人耳天然</button>
+            <button role="radio" aria-checked="true" data-view="sys">该系统</button>
+            <button role="radio" aria-checked="false" data-view="diff">差值</button>
+            <button role="radio" aria-checked="false" data-view="part">分区</button>
+          </div>
+          <label class="sr-wrap" id="base-wrap"><span style="font-size:12px;color:var(--dim)">对比</span>
+            <select id="base" aria-label="差值的对比基准"></select>
+          </label>
+          <label class="sr-wrap" id="part-wrap"><span style="font-size:12px;color:var(--dim)">分区</span>
+            <select id="part-src" aria-label="分区显示哪一个">
+              <option value="sys">该系统</option>
+              <option value="nat">人耳天然</option>
+            </select>
+          </label>
+        </div>
+        <div class="chips" role="group" aria-label="图层">
+          <button class="chip" data-layer="ell" aria-pressed="true">精度椭圆</button>
+          <button class="chip" data-layer="spk" aria-pressed="true">音箱</button>
+          <button class="chip" data-layer="shift" aria-pressed="true">声像偏移</button>
+          <button class="chip" data-layer="itd" aria-pressed="false">时间差等值线</button>
+          <button class="chip" data-layer="cone" aria-pressed="false">混淆锥</button>
+        </div>
+      </div>
+      <div class="hud bottom">
+        <div style="display:grid;gap:8px;justify-items:start">
+          <div class="sys-tag" id="sys-tag" aria-hidden="true">7.1.4<small>音箱 · 11 只</small></div>
+          <div class="legend" aria-hidden="true" id="legend"></div>
+        </div>
+        <div class="chips">
+          <button class="chip" id="view-front" aria-pressed="true">右前上方</button>
+          <button class="chip" id="view-top" aria-pressed="false">俯视</button>
+          <button class="chip" id="view-side" aria-pressed="false">侧视</button>
+          <button class="chip" id="spin" aria-pressed="false">自动旋转</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="card">
+        <h2><span>重放系统</span><span>单人还原度</span></h2>
+        <div class="ladder" id="ladder" role="radiogroup" aria-label="选择重放系统"></div>
+        <p class="summary" id="summary"></p>
+        <p class="note dim" id="sub-note" hidden>低音炮（.1）只负责约 120 Hz 以下的低音：120 Hz 的波长约 2.9 m，再低更长，耳朵基本听不出它从哪来，所以它不影响上面的定位和分区，位置主要决定低音匀不匀、轰不轰。建议放在<b style="color:var(--fg);font-weight:600">前方、靠近前置音箱的地板上</b>（图中虚线扇区）；别贴着座位放，分频点设在 80 Hz 左右，就不容易听出它的位置。有两只时，在前方不对称摆放。</p>
+      </div>
+
+      <div class="card" aria-live="polite">
+        <h2><span>当前声源</span><span id="r-sys"></span></h2>
+        <div class="dirline">
+          <div class="big" id="r-true">0° / 0°<small>真实方向</small></div>
+          <div class="big hot" id="r-heard">0° / 0°<small>听到的方向</small></div>
+        </div>
+        <div class="cmp" id="cmp"></div>
+        <dl class="kv">
+          <dt>声像偏移</dt><dd id="r-shift">0°</dd>
+          <dt>参与发声</dt><dd id="r-gains">—</dd>
+          <dt>前后混淆风险</dt><dd id="r-conf">—</dd>
+          <dt>双耳时间差 ITD</dt><dd id="r-itd">0 μs</dd>
+          <dt class="part-only">听起来一样的范围</dt><dd class="part-only" id="r-same">—</dd>
+        </dl>
+        <p class="note" id="r-note"></p>
+        <p class="note dim" id="r-nat"></p>
+      </div>
+
+      <div class="card">
+        <h2><span>放置声源</span></h2>
+        <div class="presets" role="group" aria-label="预设方向">
+          <button class="btn" data-az="0" data-el="0">正前</button>
+          <button class="btn" data-az="45" data-el="0">右前 45°</button>
+          <button class="btn" data-az="70" data-el="0">右 70°</button>
+          <button class="btn" data-az="90" data-el="0">正右</button>
+          <button class="btn" data-az="150" data-el="0">右后 150°</button>
+          <button class="btn" data-az="180" data-el="0">正后</button>
+          <button class="btn" data-az="0" data-el="45">前上方</button>
+          <button class="btn" data-az="0" data-el="90">头顶</button>
+          <button class="btn" data-az="30" data-el="-25">下方</button>
+        </div>
+        <div class="slider">
+          <label for="az">方位</label>
+          <input type="range" id="az" min="-180" max="180" step="1" value="70">
+          <output id="az-out" for="az">70°</output>
+        </div>
+        <div class="slider">
+          <label for="el">仰角</label>
+          <input type="range" id="el" min="-30" max="90" step="1" value="30">
+          <output id="el-out" for="el">30°</output>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span>水平面的双耳时间差</span></h2>
+        <svg id="itd" viewBox="0 0 320 168" role="img" aria-label="水平面内双耳时间差随方位变化的曲线，在 ±90° 处折返。"></svg>
+        <p class="note dim">曲线在 ±90° 折返：70° 和 110° 的时间差一样，只靠两耳之差分不清前后，侧面的角度变化也几乎不改变线索。音箱要补在这些地方。</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <p>怎么读：<b>人耳天然</b>是真实声源在各方向的典型定位模糊，任何重放系统都超不过它。<b>该系统</b>把每个方向按该布局实际“合成”出来：椭圆画在听到的位置上，箭头从真实方向指向听到的方向，虚线椭圆是人耳天然的大小。<b>差值</b>里，对比人耳天然时只会有冷色的“缺口”；对比上一级或其他系统时，橙色是这一级额外加强的方向，冷色是变差的方向。<b>分区</b>把球面切成一块块：同一块里的真实方向，经过这套系统后落到差不多同一个位置，彼此差距小于模糊范围，听起来就是同一个方向。块越小越多，能分开的方向越多；当前声源所在的那一块用亮边框标出。</p>
+    <p>还原度：球面上（仰角 −30° 到 90°）误差不超过人耳天然 1.3 倍的方向所占的面积。.1 低音声道不影响方向，未计入，图中只画出低音炮的大致位置和建议摆放范围（前方 ±45°、靠近前置音箱、落地）；影院对单个听众没有额外提升，未列出。</p>
+    <p>示意模型：人耳天然模糊按经典测量的典型值插值（正前约 ±3.6°，正侧约 ±10°，正后约 ±5.5°，上下约 ±10°，头顶更差）。音箱声像用 VBAP 振幅声像计算，听到的方向和模糊度按 Gerzon 能量矢量估计，并对跨过侧面的音箱对加重惩罚；低于水平面、或布局覆盖不到的方向会被压到最近能还原的位置。耳机按 HRTF 匹配程度、有无头部追踪估计误差。分区按 3° 网格把每个方向换算成“听到的位置 + 模糊椭圆”，再在听感空间里贪心覆盖：每块的中心盖住与它相差不到一个模糊范围的所有方向，其余方向归到听感上最近的中心；普通立体声耳机只保留左右（双耳差）这一维。分区只看“落在哪、糊多大”，不含前后颠倒（看“混淆锥”图层），所以头部追踪带来的提升在这里体现不出来。块数会随网格和阈值变化，适合比较布局之间的相对粗细。各数值是为了比较不同布局的趋势，不是实测结果。</p>
+    <p>参考：<a href="https://www.sfu.ca/sonic-studio-webdav/cmns/Handbook/Binaural_Hearing.html" target="_blank" rel="noopener">Binaural Hearing（SFU）</a> · <a href="https://www.sfu.ca/sonic-studio-webdav/cmns/Handbook5/handbook/Minimum_Audible_Angle.html" target="_blank" rel="noopener">Minimum Audible Angle（SFU）</a> · <a href="https://resource.isvr.soton.ac.uk/FDAG/VAP/html/localisation.html" target="_blank" rel="noopener">Localisation（ISVR）</a> · <a href="https://www.dafx.de/paper-archive/2007/Papers/p147.pdf" target="_blank" rel="noopener">Localization in reproduction（DAFx 2007）</a> · <a href="https://manuals.denon.com/avrx2800h/na/en/DRDZSYpvilxnds.php" target="_blank" rel="noopener">音箱摆位角度（Denon）</a></p>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const D2R = Math.PI / 180;
+  const R = 2.2;          // 方位球半径
+  const HR = 0.42;        // 头半径（显示用）
+  const A = 0.0875, C = 343;
+
+  /* ---------- 向量 ---------- */
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+  const norm = (a) => mul(a, 1 / (len(a) || 1));
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const angDeg = (a, b) => Math.acos(clamp(dot(norm(a), norm(b)), -1, 1)) / D2R;
+
+  /* ---------- 人耳天然 ---------- */
+  const dir = (az, el) => {
+    const a = az * D2R, e = el * D2R;
+    return [Math.cos(e) * Math.sin(a), Math.sin(e), -Math.cos(e) * Math.cos(a)];
+  };
+  const azOf = (v) => Math.atan2(v[0], -v[2]) / D2R;
+  const elOf = (v) => Math.asin(clamp(v[1] / (len(v) || 1), -1, 1)) / D2R;
+  const lateral = (az, el) => Math.asin(clamp(Math.sin(az * D2R) * Math.cos(el * D2R), -1, 1));
+  const itdOfLat = (p) => Math.sign(p) * (A / C) * (Math.abs(p) + Math.sin(Math.abs(p))) * 1e6;
+  const itd = (az, el) => itdOfLat(lateral(az, el));
+  function blur(az, el) {
+    const p = Math.abs(lateral(az, el));
+    const front = Math.cos(az * D2R) * Math.cos(el * D2R);
+    const back = Math.max(0, -front);
+    const base = lerp(3.6, 5.5, back);
+    let bh = base + (10 - base) * Math.pow(Math.sin(p), 1.6);
+    let bv = el >= 0 ? 10 + 10 * Math.pow(el / 90, 1.2) : 10 + 8 * Math.min(1, -el / 40);
+    bv += 4 * back + 3 * Math.sin(p);
+    bh = lerp(bh, bv, Math.pow(Math.max(0, el) / 90, 1.5));
+    return {bh, bv};
+  }
+  const natConf = (az, el) => 0.03 + 0.06 * (1 - Math.abs(Math.sin(lateral(az, el))));
+  const wrap180 = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
+  const mirrorDist = (az, el) => Math.acos(clamp(dot(dir(az, el), dir(180 - az, el)), -1, 1)) / D2R;
+  // 系统额外带来的前后混淆，按“猜反了会错多远”折算成期望误差
+  const confPenalty = (conf, az, el) => Math.max(0, conf - natConf(az, el)) * mirrorDist(az, el);
+
+  /* ---------- 重放系统 ---------- */
+  const S = (id, az, el, extra = {}) => ({id, az, el, u: dir(az, el), ...extra});
+  const XYZ = (id, x, y, z, extra) => {
+    const v = norm([x, y, z]);
+    return S(id, azOf(v), elOf(v), extra);
+  };
+  const TF = [XYZ('Ltf', -900, 1350, -1000), XYZ('Rtf', 900, 1350, -1000)];
+  const TM = [XYZ('Ltm', -900, 1350, 0), XYZ('Rtm', 900, 1350, 0)];
+  const TR = [XYZ('Ltr', -900, 1350, 1000), XYZ('Rtr', 900, 1350, 1000)];
+  const LCR = [S('L', -30, 0), S('C', 0, 0), S('R', 30, 0)];
+  const SIDE = [S('Lss', -90, 0), S('Rss', 90, 0)];
+  const REAR = [S('Lrs', -150, 0), S('Rrs', 150, 0)];
+  const V = (s, v) => ({...s, virt: v});
+  const HPV = {h: 4, v: 18, c: 0.3};
+  const BARV = {h: 4, v: 9, c: 0.06};
+  const SYS = [
+    {id: 'mono', name: '1.0 单声道', short: '1.0', kind: 'spk', hw: '音箱', spk: [S('C', 0, 0)]},
+    {id: 'hpst', name: '立体声耳机', short: '立体声耳机', kind: 'hpst', hw: '耳机', spk: []},
+    {id: 'st', name: '2.0 立体声', short: '2.0', kind: 'spk', hw: '音箱', spk: [S('L', -30, 0), S('R', 30, 0)]},
+    {id: 'hpvs', name: '虚拟环绕耳机', short: '虚拟 7.1', kind: 'spk', hw: '耳机', spk: [...LCR, ...SIDE, ...REAR].map((s) => V(s, HPV))},
+    {id: 'lcrs', name: '4.0 杜比立体声', short: '4.0', kind: 'spk', hw: '音箱', spk: [...LCR, S('S', 180, 0, {group: [dir(-110, 0), dir(110, 0)]})]},
+    {id: 's51', sub: true, name: '5.1 杜比数字', short: '5.1', kind: 'spk', hw: '音箱', spk: [...LCR, S('Ls', -110, 0), S('Rs', 110, 0)]},
+    {id: 's71', sub: true, name: '7.1 杜比环绕', short: '7.1', kind: 'spk', hw: '音箱', spk: [...LCR, ...SIDE, ...REAR]},
+    {id: 'hpbin', name: '全景声耳机（通用 HRTF）', short: '全景声耳机', kind: 'bin', hw: '耳机', spk: [], virt: {h: 4, v: 22, c: 0.32}},
+    {id: 'bar', name: '全景声回音壁', short: '回音壁', kind: 'spk', hw: '音箱', spk: [S('L', -15, 0), S('C', 0, 0), S('R', 15, 0), V(S('Ls', -110, 0), BARV), V(S('Rs', 110, 0), BARV), V(S('Lh', -30, 45), BARV), V(S('Rh', 30, 45), BARV)]},
+    {id: 'hptrk', name: '耳机 + 头部追踪', short: '头部追踪', kind: 'bin', hw: '耳机', spk: [], virt: {h: 5, v: 20, c: 0.16}},
+    {id: 's512', sub: true, name: '5.1.2 全景声', short: '5.1.2', kind: 'spk', hw: '音箱', spk: [...LCR, S('Ls', -110, 0), S('Rs', 110, 0), ...TM]},
+    {id: 's714', sub: true, name: '7.1.4 全景声', short: '7.1.4', kind: 'spk', hw: '音箱', spk: [...LCR, ...SIDE, ...REAR, ...TF, ...TR]},
+    {id: 's916', sub: true, name: '9.1.6 全景声', short: '9.1.6', kind: 'spk', hw: '音箱', spk: [...LCR, S('Lw', -60, 0), S('Rw', 60, 0), ...SIDE, ...REAR, ...TF, ...TM, ...TR]},
+    {
+      id: 's24', sub: true, name: '24.1.10 家用上限', short: '24.1.10', kind: 'spk', hw: '音箱',
+      spk: [
+        ...Array.from({length: 24}, (_, i) => S(`E${i * 15 - 180}`, i * 15 - 180, 0, {mini: true})),
+        ...[-1500, -750, 0, 750, 1500].flatMap((z, i) => [XYZ(`T${i}L`, -900, 1350, z, {mini: true}), XYZ(`T${i}R`, 900, 1350, z, {mini: true})]),
+      ],
+    },
+    {id: 'hpper', name: '个性化 HRTF + 头部追踪', short: '个性化耳机', kind: 'bin', hw: '耳机', spk: [], virt: {h: 1.5, v: 5, c: 0.03}},
+  ];
+  SYS.forEach((s) => (s.flat = s.spk.length > 0 && s.spk.every((q) => Math.abs(q.el) < 1)));
+  const spkCount = (s) => s.spk.reduce((k, q) => k + (q.group ? q.group.length : 1), 0);
+
+  /* VBAP：水平面 2D */
+  function vbap2d(spk, d) {
+    const az = azOf(d);
+    const ring = spk.filter((s) => Math.abs(s.el) < 1).slice().sort((a, b) => a.az - b.az);
+    if (ring.length === 0) return null;
+    if (ring.length === 1) return [{s: ring[0], g: 1}];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      let span = b.az - a.az;
+      if (span <= 0) span += 360;
+      const off = ((az - a.az) % 360 + 360) % 360;
+      if (off <= span + 1e-9) {
+        if (span > 180) return [{s: off < span / 2 ? a : b, g: 1}];
+        const ua = [Math.sin(a.az * D2R), -Math.cos(a.az * D2R)];
+        const ub = [Math.sin(b.az * D2R), -Math.cos(b.az * D2R)];
+        const p = [Math.sin(az * D2R), -Math.cos(az * D2R)];
+        const det = ua[0] * ub[1] - ua[1] * ub[0];
+        let ga = (p[0] * ub[1] - p[1] * ub[0]) / det;
+        let gb = (ua[0] * p[1] - ua[1] * p[0]) / det;
+        ga = Math.max(0, ga);
+        gb = Math.max(0, gb);
+        const n = Math.hypot(ga, gb) || 1;
+        return [{s: a, g: ga / n}, {s: b, g: gb / n}].filter((x) => x.g > 1e-4);
+      }
+    }
+    return [{s: ring[0], g: 1}];
+  }
+  /* VBAP：三维（在最近的几只音箱里找能用非负增益合成的三角形） */
+  function vbap3d(spk, d) {
+    const near = spk.map((s) => ({s, c: dot(s.u, d)})).sort((a, b) => b.c - a.c).slice(0, Math.min(12, spk.length));
+    let best = null, bestScore = 1e9;
+    for (let i = 0; i < near.length; i++)
+      for (let j = i + 1; j < near.length; j++)
+        for (let k = j + 1; k < near.length; k++) {
+          const ui = near[i].s.u, uj = near[j].s.u, uk = near[k].s.u;
+          const det = dot(ui, cross(uj, uk));
+          if (Math.abs(det) < 1e-4) continue;
+          const gi = dot(d, cross(uj, uk)) / det;
+          const gj = dot(ui, cross(d, uk)) / det;
+          const gk = dot(ui, cross(uj, d)) / det;
+          if (gi < -1e-6 || gj < -1e-6 || gk < -1e-6) continue;
+          const score = 3 - dot(ui, uj) - dot(uj, uk) - dot(ui, uk);
+          if (score < bestScore) {
+            bestScore = score;
+            best = [{s: near[i].s, g: Math.max(0, gi)}, {s: near[j].s, g: Math.max(0, gj)}, {s: near[k].s, g: Math.max(0, gk)}];
+          }
+        }
+    if (!best) return null;
+    const n = Math.hypot(...best.map((x) => x.g)) || 1;
+    return best.map((x) => ({s: x.s, g: x.g / n})).filter((x) => x.g > 1e-4);
+  }
+  function renderSpk(sys, d) {
+    const spk = sys.spk;
+    if (spk.length === 1) return [{s: spk[0], g: 1}];
+    if (sys.flat) return vbap2d(spk, d);
+    let g = vbap3d(spk, d);
+    if (!g) {
+      const az = azOf(d);
+      const dh = dir(az, Math.max(0, elOf(d)));
+      g = vbap3d(spk, dh) || vbap2d(spk, dh);
+    }
+    return g;
+  }
+
+  /** 某系统把方向 (az, el) 的声音还原成什么样 */
+  function evaluate(sys, az, el) {
+    const d = dir(az, el);
+    const nat = blur(az, el);
+    const Enat = Math.sqrt(nat.bh * nat.bv);
+    if (sys.kind === 'nat') return {p: d, delta: 0, bh: nat.bh, bv: nat.bv, E: Enat, Enat, conf: natConf(az, el), gains: [], rE: 1};
+    if (sys.kind === 'hpst') {
+      const bh = Math.hypot(nat.bh, 6), bv = 90;
+      return {p: d, delta: 0, bh, bv, E: Math.min(120, Math.sqrt(bh * bv) + confPenalty(0.5, az, el)), Enat, conf: 0.5, gains: [], rE: 1, inHead: true};
+    }
+    if (sys.kind === 'bin') {
+      const v = sys.virt;
+      const frontness = Math.max(0, Math.cos(az * D2R) * Math.cos(el * D2R));
+      const up = Math.max(0, Math.sin(el * D2R));
+      const L = Math.abs(Math.sin(lateral(az, el)));
+      const bh = Math.hypot(nat.bh, v.h), bv = Math.hypot(nat.bv, v.v * (1 + 0.5 * frontness + 0.4 * up));
+      const conf = clamp(natConf(az, el) + v.c * (1 - 0.6 * L), 0, 0.5);
+      return {p: d, delta: 0, bh, bv, E: Math.min(120, Math.sqrt(bh * bv) + confPenalty(conf, az, el)), Enat, conf, gains: [], rE: 1};
+    }
+    const gains = renderSpk(sys, d) || [];
+    let rE = [0, 0, 0], rV = [0, 0, 0], sw = 0, vh = 0, vv = 0, vc = 0;
+    for (const {s, g} of gains) {
+      const w = g * g;
+      const ub = s.group ? mul(add(s.group[0], s.group[1]), 0.5) : s.u;
+      rE = add(rE, mul(ub, w));
+      rV = add(rV, mul(ub, g));
+      sw += w;
+      if (s.virt) {
+        vh += w * s.virt.h;
+        vv += w * s.virt.v;
+        vc += w * s.virt.c;
+      }
+    }
+    sw = sw || 1;
+    rE = mul(rE, 1 / sw);
+    vh /= sw;
+    vv /= sw;
+    vc /= sw;
+    const mag = len(rE);
+    // 听到的方向：低频跟随速度矢量、高频跟随能量矢量，取两者之间
+    const p = mag > 1e-3 ? norm(add(norm(rV), norm(rE))) : d;
+    const delta = angDeg(d, p);
+    const spread = Math.acos(clamp(mag, 0, 1)) / D2R;
+    const paz = azOf(p), pel = elOf(p);
+    const L = Math.abs(Math.sin(lateral(paz, pel)));
+    const addB = spread * (0.15 + 0.55 * L * L);
+    const np = blur(paz, pel);
+    const bh = Math.hypot(np.bh, addB, vh), bv = Math.hypot(np.bv, addB, vv);
+    const conf = clamp(natConf(paz, pel) + 0.45 * (1 - mag) * (1 - L) + vc, 0, 0.5);
+    return {p, delta, bh, bv, E: Math.min(120, Math.sqrt(bh * bv) + delta + confPenalty(conf, paz, pel)), Enat, conf, gains, rE: mag, spread};
+  }
+
+  /* 网格缓存：热图（10°）与还原度 */
+  const NAT = {id: 'nat', name: '人耳天然', short: '人耳天然', kind: 'nat'};
+  const GSTEP = 10;
+  const cache = new Map();
+  function grid(sys) {
+    if (cache.has(sys.id)) return cache.get(sys.id);
+    const cells = [];
+    let wsum = 0, ok = 0, gap = 0, q = 0;
+    for (let el = -30; el < 90; el += GSTEP)
+      for (let az = -180; az < 180; az += GSTEP) {
+        const r = evaluate(sys, az + GSTEP / 2, el + GSTEP / 2);
+        // 还原度只统计耳朵高度略下方（−10°）以上：家用布局本来就不覆盖地面
+        const w = el >= -10 ? Math.cos((el + GSTEP / 2) * D2R) : 0;
+        wsum += w;
+        if (r.E <= Math.max(1.5 * r.Enat, r.Enat + 4)) ok += w;
+        gap += w * Math.max(0, r.E - r.Enat);
+        q += w * Math.min(1, r.Enat / r.E);
+        cells.push({az, el, E: r.E, Enat: r.Enat});
+      }
+    const res = {cells, coverage: ok / wsum, gap: gap / wsum, quality: q / wsum};
+    cache.set(sys.id, res);
+    return res;
+  }
+
+  /* ---------- 听感分区 ----------
+     3° 网格上的每个真实方向 → “听到的位置 + 模糊椭圆”。在听感空间里贪心覆盖：
+     从最清晰的方向开始，每个中心盖住所有和它相差不到一个模糊范围的方向；
+     其余方向归到听感上最近的中心。同一块里的方向听起来都一样。 */
+  const PSTEP = 3;
+  const PROWS = 120 / PSTEP, PCOLS = 360 / PSTEP;
+  const DOMAIN = 3 * Math.PI; // 仰角 −30°~90° 的球面面积（sr）
+  const PV = [];
+  for (let i = 0; i <= PROWS; i++) for (let j = 0; j < PCOLS; j++) PV.push(mul(dir(-180 + j * PSTEP, -30 + i * PSTEP), R));
+  const vid = (i, j) => i * PCOLS + (((j % PCOLS) + PCOLS) % PCOLS);
+  const PCELL = [];
+  for (let i = 0; i < PROWS; i++)
+    for (let j = 0; j < PCOLS; j++) {
+      const az = -180 + (j + 0.5) * PSTEP, el = -30 + (i + 0.5) * PSTEP;
+      PCELL.push({i, j, az, el, c3: mul(dir(az, el), R), w: Math.cos(el * D2R) * (PSTEP * D2R) ** 2, v: [vid(i, j), vid(i, j + 1), vid(i + 1, j + 1), vid(i + 1, j)]});
+    }
+  const cellAt = (az, el) => {
+    const i = clamp(Math.floor((el + 30) / PSTEP), 0, PROWS - 1);
+    const j = ((Math.floor((wrap180(az) + 180) / PSTEP) % PCOLS) + PCOLS) % PCOLS;
+    return i * PCOLS + j;
+  };
+  function image(sys, az, el) {
+    if (sys.kind === 'hpst') {
+      // 普通立体声耳机：只剩双耳差这一维（偏左 / 偏右），同一圈混淆锥上的方向完全一样
+      const lat = lateral(az, el) / D2R;
+      return {p: dir(lat, 0), bh: Math.hypot(blur(lat, 0).bh, 6), bv: 90};
+    }
+    const r = evaluate(sys, az, el);
+    return {p: r.p, bh: Math.max(1, r.bh), bv: clamp(r.bv, 1, 90)};
+  }
+  function tangent(p) {
+    const a = azOf(p) * D2R, e = elOf(p) * D2R;
+    return {east: [Math.cos(a), 0, Math.sin(a)], north: [-Math.sin(e) * Math.sin(a), Math.cos(e), Math.sin(e) * Math.cos(a)]};
+  }
+  // 以中心的模糊椭圆为单位的听感距离（≤ 1 = 分不出来）
+  const ndist = (q, c) => {
+    const z = dot(q, c.p);
+    if (z <= 0.05) return Infinity;
+    return Math.hypot(Math.atan2(dot(q, c.east), z) / D2R / c.bh, Math.atan2(dot(q, c.north), z) / D2R / c.bv);
+  };
+  const pcache = new Map();
+  let warmed = false;
+  function warmPartitions() {
+    if (warmed) return;
+    warmed = true;
+    const todo = [NAT, ...SYS];
+    const idle = window.requestIdleCallback || ((f) => setTimeout(f, 60));
+    const step = () => {
+      const s = todo.shift();
+      if (!s) return;
+      partition(s);
+      idle(step);
+    };
+    idle(step);
+  }
+  function partition(sys) {
+    if (pcache.has(sys.id)) return pcache.get(sys.id);
+    const N = PCELL.length;
+    const im = PCELL.map((c) => image(sys, c.az, c.el));
+    const order = Array.from({length: N}, (_, k) => k).sort((a, b) => im[a].bh * im[a].bv - im[b].bh * im[b].bv);
+    const covered = new Uint8Array(N);
+    const centers = [];
+    for (const k of order) {
+      if (covered[k]) continue;
+      const c = {p: im[k].p, bh: im[k].bh, bv: im[k].bv, ...tangent(im[k].p)};
+      centers.push(c);
+      for (let m = 0; m < N; m++) if (!covered[m] && ndist(im[m].p, c) <= 1) covered[m] = 1;
+    }
+    let cid = new Int32Array(N);
+    for (let m = 0; m < N; m++) {
+      let best = 0, bd = Infinity;
+      for (let n = 0; n < centers.length; n++) {
+        const d = ndist(im[m].p, centers[n]);
+        if (d < bd) {
+          bd = d;
+          best = n;
+        }
+      }
+      cid[m] = best;
+    }
+    // 清理：把和本块主体不相连的零碎小片并到相邻的块
+    const nb = (k) => {
+      const {i, j} = PCELL[k];
+      const out = [i * PCOLS + ((j + 1) % PCOLS), i * PCOLS + ((j + PCOLS - 1) % PCOLS)];
+      if (i > 0) out.push(k - PCOLS);
+      if (i < PROWS - 1) out.push(k + PCOLS);
+      return out;
+    };
+    for (let pass = 0; pass < 2; pass++) {
+      const comp = new Int32Array(N).fill(-1);
+      const comps = [];
+      for (let k = 0; k < N; k++) {
+        if (comp[k] >= 0) continue;
+        const id = comps.length, list = [k];
+        comp[k] = id;
+        for (let q = 0; q < list.length; q++)
+          for (const m of nb(list[q]))
+            if (comp[m] < 0 && cid[m] === cid[k]) {
+              comp[m] = id;
+              list.push(m);
+            }
+        comps.push({c: cid[k], list});
+      }
+      const biggest = new Map();
+      for (const cp of comps) biggest.set(cp.c, Math.max(biggest.get(cp.c) || 0, cp.list.length));
+      for (const cp of comps) {
+        const big = biggest.get(cp.c);
+        if (cp.list.length === big || cp.list.length >= Math.max(6, 0.25 * big)) continue;
+        const votes = new Map();
+        for (const k of cp.list) for (const m of nb(k)) if (cid[m] !== cp.c) votes.set(cid[m], (votes.get(cid[m]) || 0) + 1);
+        let to = -1, tv = 0;
+        for (const [c, v] of votes) if (v > tv) {
+          tv = v;
+          to = c;
+        }
+        if (to >= 0) for (const k of cp.list) cid[k] = to;
+      }
+    }
+    // 重新编号，统计面积
+    const remap = new Map();
+    const clusters = [];
+    for (let k = 0; k < N; k++) {
+      let n = remap.get(cid[k]);
+      if (n === undefined) {
+        n = clusters.length;
+        remap.set(cid[k], n);
+        clusters.push({cells: [], area: 0, inDomain: false});
+      }
+      cid[k] = n;
+      const cl = clusters[n];
+      cl.cells.push(k);
+      cl.area += PCELL[k].w;
+      if (PCELL[k].el >= -10) cl.inDomain = true;
+    }
+    clusters.forEach((cl) => (cl.t = clamp((Math.log(cl.area) - Math.log(0.012)) / (Math.log(2.5) - Math.log(0.012)), 0, 1)));
+    // 分界线：相邻两格属于不同块
+    const edges = [];
+    const mid = (a, b) => mul(norm(add(PV[a], PV[b])), R);
+    for (let k = 0; k < N; k++) {
+      const {i, j} = PCELL[k];
+      const kr = i * PCOLS + ((j + 1) % PCOLS);
+      if (cid[kr] !== cid[k]) {
+        const a = vid(i, j + 1), b = vid(i + 1, j + 1);
+        edges.push({a, b, ca: cid[k], cb: cid[kr], m: mid(a, b)});
+      }
+      if (i < PROWS - 1 && cid[k + PCOLS] !== cid[k]) {
+        const a = vid(i + 1, j), b = vid(i + 1, j + 1);
+        edges.push({a, b, ca: cid[k], cb: cid[k + PCOLS], m: mid(a, b)});
+      }
+    }
+    // 把分界线串成折线（在交汇点断开），再用 Chaikin 磨圆网格的台阶
+    const adj = new Map();
+    edges.forEach((e, k) => {
+      for (const v of [e.a, e.b]) {
+        if (!adj.has(v)) adj.set(v, []);
+        adj.get(v).push(k);
+      }
+    });
+    const used = new Uint8Array(edges.length);
+    const other = (e, v) => (e.a === v ? e.b : e.a);
+    const walk = (start, from) => {
+      const out = [];
+      let v = start, prev = from;
+      while (adj.get(v).length === 2) {
+        const nx = adj.get(v)[0] === prev ? adj.get(v)[1] : adj.get(v)[0];
+        if (used[nx]) break;
+        used[nx] = 1;
+        v = other(edges[nx], v);
+        out.push(v);
+        prev = nx;
+      }
+      return out;
+    };
+    const chaikin = (pts, closed) => {
+      if (pts.length < 3) return pts;
+      const out = closed ? [] : [pts[0]];
+      for (let k = 0; k < pts.length - 1; k++) {
+        const a = pts[k], b = pts[k + 1];
+        out.push(add(mul(a, 0.75), mul(b, 0.25)), add(mul(a, 0.25), mul(b, 0.75)));
+      }
+      out.push(closed ? out[0] : pts[pts.length - 1]);
+      return out.map((q) => mul(norm(q), R));
+    };
+    // 先做几轮拉普拉斯平滑把台阶拉直（端点 = 交汇点不动），再 Chaikin 圆角
+    const relax = (pts, closed, iters) => {
+      const n = pts.length;
+      for (let it = 0; it < iters; it++) {
+        const nx = pts.slice();
+        for (let k = 0; k < n; k++) {
+          let a, b;
+          if (closed) {
+            a = pts[(k - 1 + n - 1) % (n - 1)];
+            b = pts[(k + 1) % (n - 1)];
+            if (k === n - 1) continue;
+          } else {
+            if (k === 0 || k === n - 1) continue;
+            a = pts[k - 1];
+            b = pts[k + 1];
+          }
+          nx[k] = mul(norm(add(mul(pts[k], 0.5), mul(add(a, b), 0.25))), R);
+        }
+        if (closed) nx[n - 1] = nx[0];
+        pts = nx;
+      }
+      return pts;
+    };
+    const chains = [];
+    for (let k = 0; k < edges.length; k++) {
+      if (used[k]) continue;
+      used[k] = 1;
+      const e0 = edges[k];
+      const fw = walk(e0.b, k);
+      const bw = walk(e0.a, k);
+      const verts = [...bw.reverse(), e0.a, e0.b, ...fw];
+      const closed = verts.length > 3 && verts[0] === verts[verts.length - 1];
+      let pts = verts.map((v) => PV[v]);
+      pts = chaikin(chaikin(relax(pts, closed, 4), closed), closed);
+      chains.push({pts, ca: e0.ca, cb: e0.cb, q: null, f: null});
+    }
+    const res = {cid, clusters, chains, count: clusters.filter((c) => c.inDomain).length};
+    pcache.set(sys.id, res);
+    return res;
+  }
+
+  /* ---------- 状态 ---------- */
+  const state = {
+    yaw: 160, pitch: 20, dist: 7.6, fov: 40,
+    az: 70, el: 30,
+    sys: SYS.findIndex((s) => s.id === 's714'),
+    view: 'sys',
+    base: 'prev',
+    partSrc: 'sys',
+    layers: {ell: true, spk: true, shift: true, itd: false, cone: false},
+    spin: false,
+  };
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const curSys = () => SYS[state.sys];
+  const natMode = () => state.view === 'nat' || (state.view === 'part' && state.partSrc === 'nat');
+  const shownSys = () => (natMode() ? NAT : curSys());
+  function baseSys() {
+    if (state.base === 'nat') return NAT;
+    if (state.base === 'prev') return state.sys > 0 ? SYS[state.sys - 1] : NAT;
+    return SYS.find((s) => s.id === state.base) || NAT;
+  }
+
+  /* ---------- 主题颜色 ---------- */
+  const col = {};
+  const hex = (s) => {
+    s = s.trim();
+    if (s.startsWith('#') && s.length === 7) return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+    const m = s.match(/rgba?\(([^)]+)\)/);
+    if (m) {
+      const v = m[1].split(',').map((x) => parseFloat(x));
+      return [v[0], v[1], v[2]];
+    }
+    return [128, 128, 128];
+  };
+  let dirty = true;
+  let FONT_MONO = 'monospace', FONT_BODY = 'sans-serif';
+  function readTheme() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ['bg', 'surface', 'fg', 'dim', 'accent', 'accent-2', 'cool']) col[k] = hex(cs.getPropertyValue('--' + k));
+    FONT_MONO = cs.getPropertyValue('--font-mono') || 'monospace';
+    FONT_BODY = cs.getPropertyValue('--font-body') || 'sans-serif';
+    dirty = true;
+    updateLegend();
+  }
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const sharpE = (E) => clamp((Math.log(60) - Math.log(E)) / (Math.log(60) - Math.log(6)), 0, 1);
+  const tone = (s) => mix(col.cool, col.accent, Math.pow(clamp(s, 0, 1), 1.5));
+
+  /* ---------- 画布与相机 ---------- */
+  const cv = document.getElementById('view');
+  const ctx = cv.getContext('2d');
+  let W = 800, H = 600, DPR = 1;
+  function resize() {
+    const r = cv.getBoundingClientRect();
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = Math.max(10, r.width);
+    H = Math.max(10, r.height);
+    cv.width = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+    dirty = true;
+  }
+  new ResizeObserver(resize).observe(cv);
+  const cy0 = () => H * (W < 520 ? 0.55 : 0.5);
+  function camera() {
+    const y = state.yaw * D2R, p = state.pitch * D2R, d = state.dist;
+    const eye = [d * Math.cos(p) * Math.sin(y), d * Math.sin(p), d * Math.cos(p) * Math.cos(y)];
+    const fwd = norm(mul(eye, -1));
+    let right = cross(fwd, [0, 1, 0]);
+    if (len(right) < 1e-4) right = [1, 0, 0];
+    right = norm(right);
+    const up = cross(right, fwd);
+    const F = (H / 2) / Math.tan((state.fov / 2) * D2R) * (W < 520 ? 0.78 : 1);
+    return {eye, fwd, right, up, F};
+  }
+  let cam = camera();
+  const P = (p) => {
+    const d = sub(p, cam.eye);
+    const z = dot(d, cam.fwd);
+    return {x: W / 2 + (cam.F * dot(d, cam.right)) / z, y: cy0() - (cam.F * dot(d, cam.up)) / z, z, s: cam.F / z};
+  };
+  const facing = (p) => dot(p, cam.eye) > R * R * 0.999;
+  function polyline(pts, close) {
+    ctx.beginPath();
+    pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+    if (close) ctx.closePath();
+  }
+  function sphereCurve(pts3, color, width, aF, aB, dash) {
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash || []);
+    let seg = [], segFront = null;
+    const flush = () => {
+      const a = segFront ? aF : aB;
+      if (seg.length > 1 && a > 0.005) {
+        ctx.strokeStyle = rgba(color, a);
+        polyline(seg);
+        ctx.stroke();
+      }
+    };
+    for (const p of pts3) {
+      const f = facing(p), q = P(p);
+      if (segFront === null) segFront = f;
+      if (f !== segFront) {
+        seg.push(q);
+        flush();
+        seg = [q];
+        segFront = f;
+      } else seg.push(q);
+    }
+    flush();
+    ctx.setLineDash([]);
+  }
+  function ellipse3(az, el, bh, bv, n = 36, center) {
+    const p = center || dir(az, el);
+    const a = azOf(p) * D2R, e = elOf(p) * D2R;
+    const east = [Math.cos(a), 0, Math.sin(a)];
+    const north = [-Math.sin(e) * Math.sin(a), Math.cos(e), Math.sin(e) * Math.cos(a)];
+    const th = Math.tan(Math.min(bh, 70) * D2R), tv = Math.tan(Math.min(bv, 70) * D2R);
+    const out = [];
+    for (let i = 0; i <= n; i++) {
+      const t = (i / n) * Math.PI * 2;
+      out.push(mul(norm(add(p, add(mul(east, th * Math.cos(t)), mul(north, tv * Math.sin(t))))), R));
+    }
+    return out;
+  }
+
+  /* ---------- 绘制 ---------- */
+  function drawHeat(front) {
+    if (state.view === 'part') return;
+    const sys = curSys();
+    const view = state.view;
+    const g = view === 'nat' ? grid(SYS[0]) : grid(sys); // nat 视图只用 Enat
+    const gb = view === 'diff' ? (baseSys().kind === 'nat' ? null : grid(baseSys())) : null;
+    g.cells.forEach((c, i) => {
+      const c3 = mul(dir(c.az + GSTEP / 2, c.el + GSTEP / 2), R);
+      if (facing(c3) !== front) return;
+      let color, a;
+      if (view === 'nat') {
+        const s = sharpE(c.Enat);
+        color = tone(s);
+        a = front ? 0.04 + 0.12 * s * s : 0.015 + 0.03 * s;
+      } else if (view === 'sys') {
+        const s = sharpE(c.E);
+        color = tone(s);
+        a = front ? 0.05 + 0.15 * s * s : 0.015 + 0.04 * s;
+      } else {
+        const Eb = gb ? gb.cells[i].E : c.Enat;
+        const dlt = Eb - c.E; // 正 = 比基准好
+        if (Math.abs(dlt) < 1) return;
+        color = dlt > 0 ? col.accent : col.cool;
+        const k = dlt > 0 ? clamp(dlt / 18, 0, 1) : clamp(-dlt / 30, 0, 1);
+        a = (front ? 0.08 + 0.42 * k : 0.03 + 0.1 * k);
+      }
+      const corners = [dir(c.az, c.el), dir(c.az + GSTEP, c.el), dir(c.az + GSTEP, c.el + GSTEP), dir(c.az, c.el + GSTEP)].map((d) => P(mul(d, R)));
+      ctx.fillStyle = rgba(color, a);
+      polyline(corners, true);
+      ctx.fill();
+    });
+  }
+  function drawGrid(front) {
+    const a = (front ? 0.2 : 0.07) * (state.view === 'part' ? 0.5 : 1);
+    for (let el = -30; el <= 75; el += 15) {
+      const pts = [];
+      for (let az = -180; az <= 180; az += 4) pts.push(mul(dir(az, el), R));
+      sphereCurve(pts, col.fg, el === 0 ? 1.3 : 0.7, front ? (el === 0 ? 0.5 : a) : 0, front ? 0 : el === 0 ? 0.2 : a);
+    }
+    for (let az = -180; az < 180; az += 30) {
+      const pts = [];
+      for (let el = -30; el <= 90; el += 3) pts.push(mul(dir(az, el), R));
+      sphereCurve(pts, col.fg, 0.7, front ? a : 0, front ? 0 : a);
+    }
+  }
+
+  let PQ = null; // 本帧投影后的分区网格顶点
+  let PT = null; // 本帧的分区
+  function preparePartition() {
+    PT = null;
+    PQ = null;
+    if (state.view !== 'part') return;
+    PT = partition(shownSys());
+    PQ = PV.map(P);
+    for (const ch of PT.chains) {
+      ch.q = ch.pts.map(P);
+      ch.f = ch.pts.map(facing);
+    }
+  }
+  function strokeChains(front, pickFn) {
+    ctx.beginPath();
+    for (const ch of PT.chains) {
+      if (pickFn && !pickFn(ch)) continue;
+      let pen = false;
+      for (let k = 0; k < ch.q.length; k++) {
+        if (ch.f[k] !== front) {
+          pen = false;
+          continue;
+        }
+        if (pen) ctx.lineTo(ch.q[k].x, ch.q[k].y);
+        else ctx.moveTo(ch.q[k].x, ch.q[k].y);
+        pen = true;
+      }
+    }
+    ctx.stroke();
+  }
+  function drawPartition(front) {
+    if (!PT) return;
+    const hot = PT.cid[cellAt(state.az, state.el)];
+    PT.clusters.forEach((cl, n) => {
+      ctx.beginPath();
+      let any = false;
+      for (const k of cl.cells) {
+        if (facing(PCELL[k].c3) !== front) continue;
+        const v = PCELL[k].v;
+        ctx.moveTo(PQ[v[0]].x, PQ[v[0]].y);
+        ctx.lineTo(PQ[v[1]].x, PQ[v[1]].y);
+        ctx.lineTo(PQ[v[2]].x, PQ[v[2]].y);
+        ctx.lineTo(PQ[v[3]].x, PQ[v[3]].y);
+        ctx.closePath();
+        any = true;
+      }
+      if (!any) return;
+      const isHot = n === hot;
+      const c = isHot ? col.accent : mix(col.accent, col.cool, cl.t);
+      const a = isHot ? (front ? 0.36 - 0.18 * cl.t : 0.12) : front ? 0.2 - 0.09 * cl.t : 0.035;
+      ctx.fillStyle = rgba(c, a);
+      ctx.fill();
+    });
+    ctx.strokeStyle = rgba(col.fg, front ? 0.5 : 0.1);
+    ctx.lineWidth = front ? 0.9 : 0.6;
+    strokeChains(front);
+    ctx.strokeStyle = rgba(col.fg, front ? 0.95 : 0.35);
+    ctx.lineWidth = front ? 2.2 : 1;
+    strokeChains(front, (ch) => ch.ca === hot || ch.cb === hot);
+  }
+
+  const SAMPLES = [];
+  for (const [el, step] of [[-30, 30], [0, 30], [30, 30], [60, 60]]) for (let az = -180; az < 180; az += step) SAMPLES.push({az, el});
+  SAMPLES.push({az: 0, el: 90});
+
+  function drawEllipses(front) {
+    if (!state.layers.ell || state.view === 'diff' || state.view === 'part') return;
+    const sys = shownSys();
+    for (const s of SAMPLES) {
+      const r = evaluate(sys, s.az, s.el);
+      const c3 = mul(r.p, R);
+      const nat3 = mul(dir(s.az, s.el), R);
+      const f = facing(c3);
+      if (f !== front) continue;
+      const sh = sharpE(r.E);
+      const c = tone(sh);
+      const al = front ? 0.35 + 0.6 * sh : 0.1 + 0.12 * sh;
+      // 人耳天然的大小（虚线），画在真实方向上
+      if (state.view === 'sys' && sys.kind !== 'nat' && front) {
+        const nb = blur(s.az, s.el);
+        const np = ellipse3(s.az, s.el, nb.bh, nb.bv, 28).map(P);
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = rgba(col.fg, facing(nat3) ? 0.35 : 0.1);
+        ctx.lineWidth = 0.9;
+        polyline(np, true);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      const pts = ellipse3(0, 0, r.bh, r.bv, 36, r.p).map(P);
+      polyline(pts, true);
+      ctx.fillStyle = rgba(c, front ? 0.07 + 0.18 * sh : 0.02 + 0.04 * sh);
+      ctx.fill();
+      ctx.lineWidth = front ? 1.2 : 0.8;
+      ctx.strokeStyle = rgba(c, al);
+      if (r.bv >= 70 || r.bh >= 70) ctx.setLineDash([6, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // 偏移箭头：真实方向 → 听到的方向
+      if (state.layers.shift && state.view === 'sys' && r.delta > 4) arrow3(nat3, c3, front ? 0.85 : 0.3, col['accent-2']);
+    }
+  }
+  function arrow3(a3, b3, alpha, color) {
+    const pts = [];
+    for (let i = 0; i <= 16; i++) pts.push(mul(norm(add(mul(a3, 1 - i / 16), mul(b3, i / 16))), R * 1.003));
+    const qs = pts.map(P);
+    ctx.strokeStyle = rgba(color, alpha);
+    ctx.lineWidth = 1.3;
+    polyline(qs);
+    ctx.stroke();
+    const qa = qs[qs.length - 3], qb = qs[qs.length - 1];
+    const ang = Math.atan2(qb.y - qa.y, qb.x - qa.x);
+    ctx.fillStyle = rgba(color, alpha);
+    ctx.beginPath();
+    ctx.moveTo(qb.x, qb.y);
+    ctx.lineTo(qb.x - 8 * Math.cos(ang - 0.4), qb.y - 8 * Math.sin(ang - 0.4));
+    ctx.lineTo(qb.x - 8 * Math.cos(ang + 0.4), qb.y - 8 * Math.sin(ang + 0.4));
+    ctx.closePath();
+    ctx.fill();
+    const q0 = qs[0];
+    ctx.beginPath();
+    ctx.arc(q0.x, q0.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const ringAt = (p) => {
+    const pts = [];
+    const sx = Math.sin(p), cxx = Math.cos(p);
+    for (let i = 0; i <= 96; i++) {
+      const t = (i / 96) * Math.PI * 2;
+      pts.push([R * sx, R * cxx * Math.sin(t), R * cxx * Math.cos(t)]);
+    }
+    return pts;
+  };
+  const latOfItd = (us) => {
+    let lo = 0, hi = Math.PI / 2;
+    for (let i = 0; i < 40; i++) {
+      const m = (lo + hi) / 2;
+      if (itdOfLat(m) < Math.abs(us)) lo = m; else hi = m;
+    }
+    return Math.sign(us) * (lo + hi) / 2;
+  };
+  function drawItdRings(front) {
+    if (!state.layers.itd) return;
+    for (let us = -600; us <= 600; us += 100) sphereCurve(ringAt(latOfItd(us)), col['accent-2'], us === 0 ? 1.5 : 1, front ? 0.7 : 0, front ? 0 : 0.2, us === 0 ? [] : [6, 5]);
+  }
+  function drawCone(front) {
+    if (!state.layers.cone) return;
+    sphereCurve(ringAt(lateral(state.az, state.el)), col.accent, 1.8, front ? 0.9 : 0, front ? 0 : 0.3, [8, 6]);
+    const maz = wrap180(180 - state.az);
+    if (Math.abs(wrap180(maz - state.az)) < 1 || state.el > 85) return;
+    const p3 = mul(dir(maz, state.el), R);
+    if (facing(p3) !== front) return;
+    const q = P(p3);
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = rgba(col.accent, front ? 0.9 : 0.4);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `500 11px ${FONT_BODY}`;
+    ctx.fillStyle = rgba(col.accent, front ? 0.95 : 0.5);
+    ctx.textAlign = 'left';
+    ctx.fillText('前后镜像', q.x + 13, q.y - 9);
+  }
+  function drawLabels() {
+    ctx.font = `600 12px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const [az, el, t] of [[0, 0, '前 0°'], [90, 0, '右 90°'], [180, 0, '后 180°'], [-90, 0, '左 −90°'], [0, 90, '上']]) {
+      const q = P(mul(dir(az, el), R * 1.2));
+      ctx.fillStyle = rgba(col.fg, facing(mul(dir(az, el), R)) ? 0.8 : 0.3);
+      ctx.fillText(t, q.x, q.y);
+    }
+  }
+
+  /* 音箱 */
+  const spkPos = (s) => mul(s.u, R * 1.16);
+  function boxEdges(c, fwd, w, h, d) {
+    let right = cross(fwd, [0, 1, 0]);
+    if (len(right) < 1e-3) right = [1, 0, 0];
+    right = norm(right);
+    const up = cross(right, fwd);
+    const corner = (sx, sy, sz) => add(c, add(add(mul(right, sx * w), mul(up, sy * h)), mul(fwd, sz * d)));
+    const cs = [corner(-1, -1, 1), corner(1, -1, 1), corner(1, 1, 1), corner(-1, 1, 1), corner(-1, -1, -1), corner(1, -1, -1), corner(1, 1, -1), corner(-1, 1, -1)];
+    return {cs, E: [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]], right, up};
+  }
+  function drawSpeaker(s, gain, positions) {
+    const list = positions || [spkPos(s)];
+    for (const c of list) {
+      const fwd = norm(mul(c, -1));
+      const k = s.mini ? 0.6 : 1;
+      const {cs, E, right, up} = boxEdges(c, fwd, 0.085 * k, 0.12 * k, 0.08 * k);
+      const qs = cs.map(P);
+      const virt = !!s.virt;
+      ctx.setLineDash(virt ? [3, 3] : []);
+      ctx.strokeStyle = rgba(gain > 0.05 ? col.accent : col.fg, virt ? 0.55 : 0.85);
+      ctx.lineWidth = 1.1;
+      // 前面板填底色，遮住后面的线
+      const face = [qs[0], qs[1], qs[2], qs[3]];
+      polyline(face, true);
+      ctx.fillStyle = rgba(col.bg, virt ? 0.4 : 0.85);
+      ctx.fill();
+      ctx.beginPath();
+      for (const [i, j] of E) {
+        ctx.moveTo(qs[i].x, qs[i].y);
+        ctx.lineTo(qs[j].x, qs[j].y);
+      }
+      ctx.stroke();
+      // 单元
+      const fc = add(c, mul(fwd, 0.08 * k));
+      const ring = [];
+      for (let i = 0; i <= 18; i++) {
+        const t = (i / 18) * Math.PI * 2;
+        ring.push(P(add(fc, add(mul(right, Math.cos(t) * 0.05 * k), mul(up, Math.sin(t) * 0.05 * k - 0.02 * k)))));
+      }
+      polyline(ring, true);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (gain > 0.05) {
+        const q = P(fc);
+        glowDot(q.x, q.y, 0.5 + 1.2 * gain, 0.9);
+      }
+      if (!s.mini) {
+        const lq = P(add(c, mul(up, 0.2 * k)));
+        ctx.font = `600 11px ${FONT_MONO}`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = rgba(gain > 0.05 ? col.accent : col.dim, virt ? 0.7 : 0.95);
+        ctx.fillText(s.id, lq.x, lq.y);
+      }
+    }
+  }
+  function glowDot(x, y, s, a) {
+    const r = 14 * s;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba([255, 240, 225], a));
+    g.addColorStop(0.2, rgba(col.accent, 0.9 * a));
+    g.addColorStop(1, rgba(col.accent, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function speakerItems() {
+    const sys = curSys();
+    if (!state.layers.spk || natMode() || sys.kind !== 'spk') return [];
+    const pr = evaluate(sys, state.az, state.el);
+    const gmap = new Map(pr.gains.map((x) => [x.s, x.g]));
+    const items = [];
+    for (const s of sys.spk) {
+      const g = gmap.get(s) || 0;
+      if (s.group) {
+        const ps = s.group.map((u) => mul(u, R * 1.16));
+        ps.forEach((p) => items.push({z: P(p).z, draw: () => drawSpeaker(s, g, [p])}));
+      } else {
+        const p = spkPos(s);
+        items.push({z: P(p).z, draw: () => drawSpeaker(s, g)});
+      }
+    }
+    if (subShown()) items.push({z: P(SUB_C).z, draw: drawSub});
+    return items;
+  }
+
+  /* 低音炮（.1）：不参与定位，只示意位置与建议摆放范围 */
+  const FLOOR_Y = -1.3;
+  const SUB_AZ = -24, SUB_D = 2.35, SUB_S = 0.15;
+  const onFloor = (az, d, y = FLOOR_Y) => [d * Math.sin(az * D2R), y, -d * Math.cos(az * D2R)];
+  const SUB_C = onFloor(SUB_AZ, SUB_D, FLOOR_Y + SUB_S);
+  const ZONE = {a0: -45, a1: 45, r0: 1.95, r1: 2.95};
+  const subShown = () => state.layers.spk && !natMode() && curSys().kind === 'spk' && !!curSys().sub;
+  function haloText(t, x, y, color) {
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = rgba(col.bg, 0.85);
+    ctx.strokeText(t, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(t, x, y);
+  }
+  function drawSubZone() {
+    if (!subShown()) return;
+    const pts = [];
+    for (let a = ZONE.a0; a <= ZONE.a1; a += 3) pts.push(P(onFloor(a, ZONE.r0)));
+    for (let a = ZONE.a1; a >= ZONE.a0; a -= 3) pts.push(P(onFloor(a, ZONE.r1)));
+    polyline(pts, true);
+    ctx.fillStyle = rgba(col['accent-2'], 0.07);
+    ctx.fill();
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1.1;
+    ctx.strokeStyle = rgba(col['accent-2'], 0.6);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 扇区里的径向细线，读起来像一块“可放区域”
+    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = rgba(col['accent-2'], 0.18);
+    ctx.beginPath();
+    for (let a = ZONE.a0 + 15; a < ZONE.a1; a += 15) {
+      const q0 = P(onFloor(a, ZONE.r0)), q1 = P(onFloor(a, ZONE.r1));
+      ctx.moveTo(q0.x, q0.y);
+      ctx.lineTo(q1.x, q1.y);
+    }
+    ctx.stroke();
+  }
+  function drawSub() {
+    // 低频几乎全方向辐射：地板上画两圈虚线波纹
+    ctx.setLineDash([3, 4]);
+    ctx.lineWidth = 1;
+    for (const [r, a] of [[0.3, 0.45], [0.48, 0.25]]) {
+      const ring = [];
+      for (let i = 0; i <= 40; i++) {
+        const t = (i / 40) * Math.PI * 2;
+        ring.push(P(add(SUB_C, [r * Math.cos(t), -SUB_S, r * Math.sin(t)])));
+      }
+      ctx.strokeStyle = rgba(col['accent-2'], a);
+      polyline(ring, true);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    const fwd = norm([-SUB_C[0], 0, -SUB_C[2]]);
+    const {cs, E, right, up} = boxEdges(SUB_C, fwd, SUB_S, SUB_S, SUB_S);
+    const qs = cs.map(P);
+    polyline([qs[0], qs[1], qs[2], qs[3]], true);
+    ctx.fillStyle = rgba(col.bg, 0.85);
+    ctx.fill();
+    ctx.strokeStyle = rgba(col.fg, 0.85);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (const [i, j] of E) {
+      ctx.moveTo(qs[i].x, qs[i].y);
+      ctx.lineTo(qs[j].x, qs[j].y);
+    }
+    ctx.stroke();
+    const fc = add(SUB_C, mul(fwd, SUB_S));
+    for (const r of [0.105, 0.05]) {
+      const ring = [];
+      for (let i = 0; i <= 24; i++) {
+        const t = (i / 24) * Math.PI * 2;
+        ring.push(P(add(fc, add(mul(right, Math.cos(t) * r), mul(up, Math.sin(t) * r)))));
+      }
+      polyline(ring, true);
+      ctx.stroke();
+    }
+  }
+  function drawSubLabel() {
+    if (!subShown()) return;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // 低音炮本体
+    const sq = P(add(SUB_C, [0, SUB_S + 0.1, 0]));
+    ctx.font = `600 11px ${FONT_MONO}`;
+    haloText('SUB · .1', sq.x, sq.y - 4, rgba(col['accent-2'], 0.95));
+    ctx.font = `500 11px ${FONT_BODY}`;
+    haloText('位置不必很准', sq.x, sq.y - 19, rgba(col.fg, 0.7));
+    // 范围标注：挑扇区外沿上画面里最靠上、又在画布内的点
+    let best = null;
+    const hq = P([0, 0, 0]);
+    const hr = Math.max(70, (HR + 0.5) * hq.s);
+    for (let a = ZONE.a0; a <= ZONE.a1; a += 5) {
+      const q = P(onFloor(a, ZONE.r1));
+      if (q.z <= 0 || q.x < 90 || q.x > W - 90 || q.y < 40 || q.y > H - 60) continue;
+      if (Math.hypot(q.x - sq.x, q.y - sq.y) < 60 || Math.hypot(q.x - hq.x, q.y - 14 - hq.y) < hr) continue;
+      if (!best || q.y < best.y) best = q;
+    }
+    if (!best) return;
+    ctx.font = `600 12px ${FONT_BODY}`;
+    haloText('低音炮建议范围', best.x, best.y - 22, rgba(col['accent-2'], 0.95));
+    ctx.font = `500 11px ${FONT_BODY}`;
+    haloText('前方 ±45° · 靠近前置音箱 · 落地', best.x, best.y - 7, rgba(col.fg, 0.75));
+  }
+
+  /* 头、耳、耳机 */
+  const EAR = [[-(HR + 0.02), -0.03, 0.03], [HR + 0.02, -0.03, 0.03]];
+  function circle3(c, r, normal, n = 28) {
+    const nn = norm(normal);
+    let u = cross(nn, [0, 1, 0]);
+    if (len(u) < 1e-4) u = cross(nn, [1, 0, 0]);
+    u = norm(u);
+    const v = cross(nn, u);
+    const out = [];
+    for (let i = 0; i <= n; i++) {
+      const t = (i / n) * Math.PI * 2;
+      out.push(add(c, add(mul(u, Math.cos(t) * r), mul(v, Math.sin(t) * r))));
+    }
+    return out;
+  }
+  function drawEar(i, glow, phones) {
+    const c = EAR[i];
+    if (phones) {
+      const cup = circle3(add(c, [i ? 0.05 : -0.05, 0, 0]), 0.2, [1, 0, 0]).map(P);
+      polyline(cup, true);
+      ctx.fillStyle = rgba(col.bg, 1);
+      ctx.fill();
+      ctx.strokeStyle = rgba(col['accent-2'], 0.95);
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      const cup2 = circle3(add(c, [i ? 0.11 : -0.11, 0, 0]), 0.2, [1, 0, 0]).map(P);
+      polyline(cup2, true);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    } else {
+      const pts = circle3(c, 0.11, [1, 0, 0]).map(P);
+      polyline(pts, true);
+      ctx.fillStyle = rgba(col.bg, 1);
+      ctx.fill();
+      ctx.strokeStyle = rgba(col.fg, 0.95);
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      polyline(circle3(c, 0.05, [1, 0, 0]).map(P), true);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    if (glow > 0) {
+      const q = P(add(c, [i ? 0.06 : -0.06, 0, 0]));
+      const r = 24 * glow + 6;
+      const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
+      g.addColorStop(0, rgba(col.accent, 0.85 * glow));
+      g.addColorStop(1, rgba(col.accent, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  function drawHead(earGlow, phones) {
+    const q = P([0, 0, 0]);
+    const r = HR * q.s;
+    const order = dot(EAR[0], cam.eye) < dot(EAR[1], cam.eye) ? [0, 1] : [1, 0];
+    drawEar(order[0], earGlow[order[0]], phones);
+    const g = ctx.createRadialGradient(q.x - r * 0.35, q.y - r * 0.4, r * 0.1, q.x, q.y, r);
+    g.addColorStop(0, rgba(mix(col.bg, col.fg, 0.16), 1));
+    g.addColorStop(1, rgba(col.bg, 1));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.strokeStyle = rgba(col.fg, 0.26);
+    ctx.lineWidth = 0.8;
+    for (let d = -r * 1.5; d < r * 1.5; d += Math.max(3, r / 6)) {
+      ctx.beginPath();
+      ctx.moveTo(q.x + d - r, q.y - r);
+      ctx.lineTo(q.x + d + r, q.y + r);
+      ctx.stroke();
+    }
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(q.x - r * 0.24, q.y - r * 0.24, r * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = rgba(col.fg, 0.95);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    const n0 = P([0, -0.04, -HR * 0.95]), n1 = P([0, -0.1, -HR - 0.17]);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(n0.x, n0.y);
+    ctx.lineTo(n1.x, n1.y);
+    ctx.stroke();
+    if (phones) {
+      const band = [];
+      for (let i = 0; i <= 30; i++) {
+        const th = Math.PI * (i / 30);
+        band.push(P([-Math.cos(th) * (HR + 0.1), Math.sin(th) * (HR + 0.08), 0.02]));
+      }
+      ctx.strokeStyle = rgba(col['accent-2'], 0.95);
+      ctx.lineWidth = 2;
+      polyline(band);
+      ctx.stroke();
+    }
+    drawEar(order[1], earGlow[order[1]], phones);
+  }
+
+  /* 当前声源 */
+  function probeItems() {
+    const sys = shownSys();
+    const r = evaluate(sys, state.az, state.el);
+    const t3 = mul(dir(state.az, state.el), R);
+    const h3 = mul(r.p, R);
+    return {r, t3, h3, sys};
+  }
+  function drawProbe(front) {
+    const {r, t3, h3, sys} = probeItems();
+    if (state.view === 'diff') {
+      if (facing(t3) === front) {
+        const q = P(t3);
+        glowDot(q.x, q.y, 1.2, front ? 1 : 0.5);
+      }
+      return;
+    }
+    // 真实方向（空心圈）
+    if (sys.kind !== 'nat' && facing(t3) === front) {
+      const q = P(t3);
+      ctx.strokeStyle = rgba(col.fg, front ? 0.9 : 0.4);
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (facing(h3) !== front) return;
+    if (state.view !== 'part') {
+      const pts = ellipse3(0, 0, r.bh, r.bv, 48, r.p).map(P);
+      polyline(pts, true);
+      ctx.fillStyle = rgba(col.accent, front ? 0.2 : 0.08);
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = rgba(col.accent, front ? 1 : 0.45);
+      if (r.bv >= 70) ctx.setLineDash([7, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const q = P(h3);
+    glowDot(q.x, q.y, front ? 1.4 : 0.9, front ? 1 : 0.5);
+    if (sys.kind !== 'nat' && r.delta > 2 && front) arrow3(t3, h3, 0.95, col.fg);
+  }
+  function drawSpeakerLines() {
+    const sys = curSys();
+    if ((state.view !== 'sys' && state.view !== 'part') || natMode() || sys.kind !== 'spk' || !state.layers.spk) return;
+    const {r, h3} = probeItems();
+    const qh = P(h3);
+    for (const {s, g} of r.gains) {
+      const ps = s.group ? s.group.map((u) => mul(u, R * 1.16)) : [spkPos(s)];
+      for (const p of ps) {
+        const q = P(add(p, mul(norm(mul(p, -1)), 0.08)));
+        ctx.strokeStyle = rgba(col.accent, 0.25 + 0.6 * g);
+        ctx.lineWidth = 0.8 + 2.2 * g;
+        ctx.beginPath();
+        ctx.moveTo(q.x, q.y);
+        ctx.lineTo(qh.x, qh.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function render() {
+    cam = camera();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const sys = curSys();
+    const phones = !natMode() && (sys.kind === 'bin' || sys.kind === 'hpst' || sys.id === 'hpvs');
+    const it = itd(state.az, state.el);
+    const g = clamp(Math.abs(it) / 650, 0, 1);
+    const earGlow = it >= 0 ? [0.15 + 0.35 * (1 - g), 0.6 + 0.4 * g] : [0.6 + 0.4 * g, 0.15 + 0.35 * (1 - g)];
+
+    preparePartition();
+    const spk = speakerItems();
+    const headZ = P([0, 0, 0]).z;
+    drawSubZone();
+    drawHeat(false);
+    drawPartition(false);
+    drawGrid(false);
+    drawItdRings(false);
+    drawCone(false);
+    drawEllipses(false);
+    drawProbe(false);
+    spk.filter((x) => x.z > headZ + R * 0.5).sort((a, b) => b.z - a.z).forEach((x) => x.draw());
+    drawSpeakerLines();
+    drawHead(earGlow, phones);
+    drawHeat(true);
+    drawPartition(true);
+    drawGrid(true);
+    drawItdRings(true);
+    drawCone(true);
+    drawEllipses(true);
+    drawProbe(true);
+    spk.filter((x) => x.z <= headZ + R * 0.5).sort((a, b) => b.z - a.z).forEach((x) => x.draw());
+    drawLabels();
+    drawSubLabel();
+  }
+
+  /* ---------- 面板 ---------- */
+  const $ = (id) => document.getElementById(id);
+  const fmt = (v) => (Math.round(v) === -180 ? '180°' : `${v < -0.5 ? '−' : ''}${Math.abs(Math.round(v))}°`);
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  function buildLadder() {
+    const box = $('ladder');
+    box.innerHTML = '';
+    SYS.forEach((s, i) => {
+      const g = grid(s);
+      const b = document.createElement('button');
+      b.className = 'sys';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(i === state.sys));
+      b.title = s.kind === 'spk' ? `${s.name} · ${spkCount(s)} 只${s.sub ? ' + 低音炮' : ''}${s.spk.some((q) => q.virt) ? '（含虚拟）' : ''}` : s.name;
+      b.innerHTML = `<span class="kind ${s.hw === '耳机' ? 'hp' : ''}">${s.hw === '耳机' ? '耳' : '箱'}</span><span class="name">${s.name}</span><span class="bar"><i style="width:${(g.quality * 100).toFixed(1)}%"></i></span><span class="pct">${pct(g.quality)}</span>`;
+      b.addEventListener('click', () => selectSys(i));
+      box.appendChild(b);
+    });
+  }
+  function fillBaseSelect() {
+    const sel = $('base');
+    sel.innerHTML = '';
+    const opts = [['prev', '上一级'], ['nat', '人耳天然'], ...SYS.map((s) => [s.id, s.short])];
+    for (const [v, t] of opts) {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = t;
+      sel.appendChild(o);
+    }
+    sel.value = state.base;
+  }
+  function selectSys(i) {
+    state.sys = i;
+    document.querySelectorAll('#ladder .sys').forEach((b, k) => b.setAttribute('aria-checked', String(k === i)));
+    updateAll();
+  }
+  function updateSummary() {
+    const s = curSys();
+    const g = grid(s);
+    const b = baseSys();
+    const gb = b.kind === 'nat' ? null : grid(b);
+    let txt = `<b>${s.name}</b>：平均精度达到人耳天然的 <b>${pct(g.quality)}</b>，${pct(g.coverage)} 的方向接近天然，平均多出 ${g.gap.toFixed(1)}° 误差。`;
+    const pn = partition(NAT).count;
+    if (state.view === 'part') {
+      txt = natMode()
+        ? `<b>人耳天然</b>能把球面分成约 <b>${pn}</b> 块“听起来一样”的区域：正前方切得最细，侧面和头顶最粗。`
+        : `<b>${s.name}</b>把球面切成约 <b>${partition(s).count}</b> 块“听起来一样”的区域（人耳天然约 ${pn} 块）。块越多越细，能分开的方向就越多。`;
+    } else if (gb) {
+      const d = g.quality - gb.quality;
+      txt += ` 比 ${b.short} ${d >= 0 ? '提升' : '下降'} ${Math.abs(Math.round(d * 100))} 个百分点。`;
+    }
+    $('summary').innerHTML = txt;
+    $('sub-note').hidden = !(s.sub && !natMode());
+    const n = s.kind === 'spk' ? spkCount(s) : 0;
+    const nm = natMode();
+    const hwTxt = nm ? '真实声源 · 理论上限' : s.kind === 'spk' ? `${s.hw} · ${n} 只${s.sub ? ' + 低音炮' : ''}${s.spk.some((q) => q.virt) ? '（虚线为虚拟）' : ''}` : s.hw;
+    const extra = state.view === 'diff' ? ` · 对比 ${b.short}` : state.view === 'part' ? ` · 约 ${partition(shownSys()).count} 块` : '';
+    $('sys-tag').innerHTML = `${nm ? '人耳天然' : s.short}<small>${state.view === 'part' && nm ? '真实声源' : hwTxt}${extra}</small>`;
+  }
+  function updateLegend() {
+    const el = $('legend');
+    if (!el) return;
+    if (state.view === 'part') {
+      el.innerHTML = `<div>听感分区：同一块里的方向听起来一样</div><div class="ramp" style="background:linear-gradient(90deg,var(--accent),var(--cool))"></div><div class="ramp-labels"><span>小块 · 分得清</span><span>大块 · 混成一片</span></div>`;
+    } else if (state.view === 'diff') {
+      el.innerHTML = `<div>差值：误差减少（橙）/ 增加（冷）</div><div class="ramp" style="background:linear-gradient(90deg,var(--cool),transparent 50%,var(--accent))"></div><div class="ramp-labels"><span>比基准差</span><span>比基准好</span></div>`;
+    } else {
+      el.innerHTML = `<div>${state.view === 'nat' ? '人耳天然的定位误差' : '该系统的定位误差'}</div><div class="ramp" style="background:linear-gradient(90deg,var(--cool),var(--accent))"></div><div class="ramp-labels"><span>±60° 模糊</span><span>±6° 精确</span></div>`;
+    }
+  }
+  function sysNote(sys, r, az, el) {
+    if (natMode()) return '真实声源：这是耳朵自己的分辨能力，任何重放系统都只能接近它。';
+    if (sys.kind === 'hpst') return '普通立体声耳机只靠左右音量差：方向只剩“偏左还是偏右”，声音在脑袋里，前后和上下的信息都没有。';
+    if (sys.kind === 'bin') {
+      if (sys.id === 'hpper') return '按你自己的耳廓算出两耳信号，再跟着转头：任何方向（包括下方）都能直接合成，误差接近人耳天然。';
+      if (sys.id === 'hptrk') return '头部追踪让转头时声音留在原位，前后混淆大幅减少；但仍是通用耳廓，上下判断差一些。';
+      return '通用 HRTF 能把声音放到任何方向，但耳廓对不上：正前方和上方最不稳，前后容易颠倒。';
+    }
+    const n = r.gains.length;
+    const ids = r.gains.map((x) => x.s.id);
+    if (el < -3 && r.delta > 5) return `这套布局没有低于耳朵的音箱，下方的声音被抬到水平面附近（偏移 ${r.delta.toFixed(0)}°）。`;
+    if (sys.flat && el > 12) return `没有顶置音箱，高处的声音被压到水平面上（偏移 ${r.delta.toFixed(0)}°）。`;
+    if (n === 1 && r.delta > 8) return `两侧没有可用的音箱对，声音塌到最近的 ${ids[0]} 上（偏移 ${r.delta.toFixed(0)}°）。`;
+    if (n === 1 || r.rE > 0.985) return `${ids[0]} 正好在这个方向附近，相当于一个真实声源，接近人耳天然。`;
+    const span = n >= 2 ? Math.max(...r.gains.flatMap((a) => r.gains.map((b) => angDeg(a.s.u, b.s.u)))) : 0;
+    const L = Math.abs(Math.sin(lateral(azOf(r.p), elOf(r.p))));
+    if (r.gains.some((x) => x.s.group)) return '环绕只有一路：身后的方向靠两侧音箱放同一个信号，声像散成一片，分不出左右。';
+    if (span > 70 && L > 0.6) return `要靠相距约 ${span.toFixed(0)}° 的 ${ids.join(' + ')} 合成，正好跨过耳朵最迟钝的侧面，声像发虚。`;
+    if (span > 100) return `${ids.join(' + ')} 相距约 ${span.toFixed(0)}°，中间是空洞，合成的声像宽而不稳。`;
+    if (r.gains.some((x) => x.s.virt)) return `部分方向靠虚拟音箱（虚线）合成，依赖房间反射或通用耳廓，比实体音箱模糊。`;
+    return `由 ${ids.join(' + ')} 合成（相距约 ${span.toFixed(0)}°），间隔够小，声像比较稳。`;
+  }
+  function natNote(az, el) {
+    const p = Math.abs(lateral(az, el)) / D2R;
+    const front = Math.cos(az * D2R) * Math.cos(el * D2R);
+    if (el > 60) return '人耳本身：头顶附近两耳之差几乎为 0，全靠耳廓频谱，本来就比较模糊。';
+    if (p < 12) return front >= 0 ? '人耳本身：正前方最灵敏，最小可分辨角可低到约 1°。' : '人耳本身：正后方左右还算准，但和正前方线索相同，容易前后颠倒。';
+    if (p > 62) return '人耳本身：靠近耳轴，时间差几乎不再随角度变化，左右分辨变差。';
+    return '人耳本身：斜前、斜后方，左右判断不错，前后要靠耳廓。';
+  }
+  function updateReadout() {
+    const {az, el} = state;
+    const sys = curSys();
+    const shown = shownSys();
+    const r = evaluate(shown, az, el);
+    $('r-sys').textContent = shown.short;
+    $('r-true').firstChild.nodeValue = `${fmt(az)} / ${fmt(el)}`;
+    $('r-heard').firstChild.nodeValue = r.inHead ? '颅内' : `${fmt(azOf(r.p))} / ${fmt(elOf(r.p))}`;
+    $('r-shift').textContent = r.inHead ? '声音在头里' : `${r.delta.toFixed(1)}°`;
+    $('r-shift').className = r.delta > 8 || r.inHead ? 'cool' : '';
+    $('r-gains').textContent = r.gains.length ? r.gains.map((x) => `${x.s.id} ${Math.round(x.g * x.g * 100)}%`).join(' · ') : shown.kind === 'nat' ? '真实声源' : '双耳直接合成';
+    $('r-conf').textContent = pct(r.conf);
+    $('r-conf').className = r.conf > 0.2 ? 'cool' : '';
+    const it = itd(az, el);
+    $('r-itd').textContent = `${it > 0.5 ? '+' : it < -0.5 ? '−' : ''}${Math.abs(Math.round(it))} μs`;
+    // 误差对比条
+    const nat = r.Enat, E = r.E;
+    const b = baseSys();
+    const Eb = b.kind === 'nat' ? null : evaluate(b, az, el).E;
+    const maxE = Math.max(30, E, nat, Eb || 0);
+    const row = (label, v, color) => `<div class="row"><span>${label}</span><div class="track"><i style="width:${((v / maxE) * 100).toFixed(1)}%;background:${color}"></i></div><span>±${v.toFixed(1)}°</span></div>`;
+    let html = row('人耳天然', nat, 'var(--dim)');
+    if (!natMode()) html += row(shown.short, E, 'var(--accent)');
+    if (state.view === 'diff' && Eb !== null) html += row(b.short, Eb, 'var(--cool)');
+    $('cmp').innerHTML = html;
+    $('r-note').textContent = sysNote(shown, r, az, el);
+    if (state.view === 'part') {
+      const k = cellAt(az, el);
+      const frac = (q) => {
+        const pt = partition(q);
+        const v = pt.clusters[pt.cid[k]].area / DOMAIN;
+        return v < 0.01 ? `${(v * 100).toFixed(1)}%` : pct(v);
+      };
+      $('r-same').textContent = natMode() ? `约占球面 ${frac(NAT)}` : `约占球面 ${frac(shown)} · 天然 ${frac(NAT)}`;
+    }
+    $('r-nat').textContent = natNote(az, el);
+    $('az').value = Math.round(az);
+    $('el').value = Math.round(el);
+    $('az-out').textContent = fmt(az);
+    $('el-out').textContent = fmt(el);
+    updateChart();
+  }
+  function updateAll() {
+    updateSummary();
+    updateLegend();
+    updateReadout();
+    $('base-wrap').style.display = state.view === 'diff' ? '' : 'none';
+    $('part-wrap').style.display = state.view === 'part' ? '' : 'none';
+    document.documentElement.dataset.mode = state.view;
+    if (state.view === 'part') warmPartitions();
+    for (const k of ['ell', 'shift']) {
+      const off = state.view === 'diff' || state.view === 'part' || (k === 'shift' && state.view === 'nat');
+      document.querySelector(`[data-layer="${k}"]`).setAttribute('aria-disabled', String(off));
+    }
+    dirty = true;
+  }
+
+  /* ITD 小图 */
+  const svg = $('itd');
+  const CX0 = 34, CX1 = 308, CY0 = 14, CY1 = 140;
+  const cx = (az) => CX0 + ((az + 180) / 360) * (CX1 - CX0);
+  const cy = (us) => CY0 + ((700 - us) / 1400) * (CY1 - CY0);
+  const chart = {};
+  function buildChart() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const mk = (tag, attrs, text) => {
+      const e = document.createElementNS(NS, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text) e.textContent = text;
+      svg.appendChild(e);
+      return e;
+    };
+    mk('line', {class: 'axis', x1: CX0, x2: CX1, y1: cy(0), y2: cy(0)});
+    mk('line', {class: 'axis', x1: CX0, x2: CX0, y1: CY0, y2: CY1});
+    for (const a of [-90, 90]) mk('line', {class: 'fold', x1: cx(a), x2: cx(a), y1: CY0, y2: CY1});
+    let d = '';
+    for (let az = -180; az <= 180; az += 2) d += `${az === -180 ? 'M' : 'L'}${cx(az).toFixed(1)},${cy(itd(az, 0)).toFixed(1)}`;
+    mk('path', {class: 'curve', d});
+    for (const a of [-180, -90, 0, 90, 180]) mk('text', {x: cx(a), y: CY1 + 16, 'text-anchor': 'middle'}, `${a}°`);
+    for (const v of [600, 0, -600]) mk('text', {x: CX0 - 4, y: cy(v) + 3, 'text-anchor': 'end'}, `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}`);
+    mk('text', {x: CX0 + 4, y: CY0 + 8}, 'ITD μs（水平面）');
+    chart.same = mk('line', {class: 'same'});
+    chart.ghost = mk('circle', {class: 'ghost', r: 4.5});
+    chart.dot = mk('circle', {class: 'dot', r: 5});
+  }
+  function updateChart() {
+    const az = state.az, v = itd(az, 0), m = wrap180(180 - az);
+    chart.dot.setAttribute('cx', cx(az));
+    chart.dot.setAttribute('cy', cy(v));
+    chart.ghost.setAttribute('cx', cx(m));
+    chart.ghost.setAttribute('cy', cy(v));
+    chart.same.setAttribute('x1', cx(Math.min(az, m)));
+    chart.same.setAttribute('x2', cx(Math.max(az, m)));
+    chart.same.setAttribute('y1', cy(v));
+    chart.same.setAttribute('y2', cy(v));
+    const show = Math.abs(az) !== 90;
+    chart.ghost.style.display = show ? '' : 'none';
+    chart.same.style.display = show ? '' : 'none';
+  }
+
+  /* ---------- 交互 ---------- */
+  function setProbe(az, el) {
+    state.az = clamp(Math.round(wrap180(az)), -180, 180);
+    state.el = clamp(Math.round(el), -30, 90);
+    updateReadout();
+    dirty = true;
+  }
+  function pick(mx, my) {
+    cam = camera();
+    const d = norm(add(cam.fwd, add(mul(cam.right, (mx - W / 2) / cam.F), mul(cam.up, -(my - cy0()) / cam.F))));
+    const e = cam.eye, b = dot(e, d), c = dot(e, e) - R * R, disc = b * b - c;
+    if (disc < 0) return null;
+    const q = add(e, mul(d, -b - Math.sqrt(disc)));
+    return {az: azOf(q), el: elOf(q)};
+  }
+  const pointers = new Map();
+  let downAt = null, moved = 0, pinch0 = null;
+  cv.addEventListener('pointerdown', (e) => {
+    cv.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    downAt = {x: e.clientX, y: e.clientY};
+    moved = 0;
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch0 = {d: Math.hypot(a.x - b.x, a.y - b.y), dist: state.dist};
+    }
+    setSpin(false);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (pointers.size === 2 && pinch0) {
+      const [a, b] = [...pointers.values()];
+      state.dist = clamp(pinch0.dist * (pinch0.d / Math.max(20, Math.hypot(a.x - b.x, a.y - b.y))), 4.4, 13);
+      moved = 99;
+      dirty = true;
+      return;
+    }
+    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+    moved += Math.abs(dx) + Math.abs(dy);
+    state.yaw -= dx * 0.4;
+    state.pitch = clamp(state.pitch + dy * 0.3, -75, 88);
+    clearViewChips();
+    dirty = true;
+  });
+  const end = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch0 = null;
+    if (moved < 6 && downAt) {
+      const r = cv.getBoundingClientRect();
+      const hit = pick(e.clientX - r.left, e.clientY - r.top);
+      if (hit) setProbe(hit.az, hit.el);
+    }
+    downAt = null;
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    state.dist = clamp(state.dist * Math.exp(e.deltaY * 0.0012), 4.4, 13);
+    dirty = true;
+  }, {passive: false});
+  cv.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (k === 'ArrowLeft') state.yaw += 6;
+    else if (k === 'ArrowRight') state.yaw -= 6;
+    else if (k === 'ArrowUp') state.pitch = clamp(state.pitch + 5, -75, 88);
+    else if (k === 'ArrowDown') state.pitch = clamp(state.pitch - 5, -75, 88);
+    else if (k === '+' || k === '=') state.dist = clamp(state.dist * 0.9, 4.4, 13);
+    else if (k === '-') state.dist = clamp(state.dist * 1.1, 4.4, 13);
+    else return;
+    e.preventDefault();
+    clearViewChips();
+    dirty = true;
+  });
+
+  document.querySelectorAll('[data-layer]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const k = b.dataset.layer;
+      state.layers[k] = !state.layers[k];
+      b.setAttribute('aria-pressed', String(state.layers[k]));
+      dirty = true;
+    }),
+  );
+  document.querySelectorAll('[data-view]').forEach((b) =>
+    b.addEventListener('click', () => {
+      state.view = b.dataset.view;
+      document.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      updateAll();
+    }),
+  );
+  $('base').addEventListener('change', (e) => {
+    state.base = e.target.value;
+    updateAll();
+  });
+  $('part-src').addEventListener('change', (e) => {
+    state.partSrc = e.target.value;
+    updateAll();
+  });
+
+  const VIEWS = {'view-front': [160, 20, 7.6], 'view-top': [0, 86, 8], 'view-side': [90, 6, 7.6]};
+  let anim = null;
+  function clearViewChips() {
+    for (const id of Object.keys(VIEWS)) $(id).setAttribute('aria-pressed', 'false');
+  }
+  for (const id of Object.keys(VIEWS)) {
+    $(id).addEventListener('click', () => {
+      clearViewChips();
+      $(id).setAttribute('aria-pressed', 'true');
+      setSpin(false);
+      const [y, p, d] = VIEWS[id];
+      const y0 = state.yaw, p0 = state.pitch, d0 = state.dist, dy = wrap180(y - y0);
+      const t0 = performance.now(), dur = reduceMotion ? 1 : 650;
+      anim = (now) => {
+        const k = clamp((now - t0) / dur, 0, 1);
+        const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        state.yaw = y0 + dy * e;
+        state.pitch = lerp(p0, p, e);
+        state.dist = lerp(d0, d, e);
+        dirty = true;
+        if (k >= 1) anim = null;
+      };
+    });
+  }
+  function setSpin(on) {
+    state.spin = on;
+    $('spin').setAttribute('aria-pressed', String(on));
+  }
+  $('spin').addEventListener('click', () => setSpin(!state.spin));
+  document.querySelectorAll('.presets .btn').forEach((b) => b.addEventListener('click', () => setProbe(+b.dataset.az, +b.dataset.el)));
+  $('az').addEventListener('input', (e) => setProbe(+e.target.value, state.el));
+  $('el').addEventListener('input', (e) => setProbe(state.az, +e.target.value));
+
+  readTheme();
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTheme);
+  new MutationObserver(readTheme).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+
+  function frame(now) {
+    if (anim) anim(now);
+    if (state.spin) {
+      state.yaw -= 0.1;
+      dirty = true;
+    }
+    if (dirty) {
+      dirty = false;
+      render();
+    }
+    requestAnimationFrame(frame);
+  }
+  buildChart();
+  buildLadder();
+  fillBaseSelect();
+  resize();
+  updateAll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => (dirty = true));
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

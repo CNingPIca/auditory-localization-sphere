@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>听觉方位球 · 版本选择</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
+<style>
+/* 版本选择页：沿用听觉方位球的墨黑 / 骨白 / 信号橙；两张版本卡片并列，手机上堆叠 */
+:root {
+  --bg: #0b0b0c; --surface: #131315; --line: rgba(238, 233, 223, 0.14);
+  --fg: #eee9df; --dim: #9c978f; --accent: #ff5a1f; --cool: #6f8aa6;
+  --font-display: "Archivo", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f1f0ed; --surface: #e8e6e1; --line: rgba(20, 20, 22, 0.14); --fg: #151517; --dim: #67635c; --accent: #d2400c; --cool: #5d7896; color-scheme: light; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 48px;
+}
+main { max-width: 1040px; margin: 0 auto; display: grid; gap: 28px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 6px 0 0; font-weight: 900; font-size: clamp(30px, 5vw, 50px); letter-spacing: 0.04em; line-height: 1.1; }
+.lede { margin: 10px 0 0; color: var(--dim); max-width: 64ch; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+a.card {
+  display: grid; gap: 10px; padding: 20px; border: 1px solid var(--line); background: var(--surface);
+  color: inherit; text-decoration: none; min-width: 0;
+}
+a.card:hover { border-color: var(--accent); }
+a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tag { font-family: var(--font-display); font-stretch: 72%; font-weight: 900; font-size: 40px; line-height: 1; }
+.tag small { display: block; margin-top: 6px; font-family: var(--font-mono); font-stretch: 100%; font-weight: 500; font-size: 11px; letter-spacing: 0.12em; color: var(--accent); }
+.card h2 { margin: 0; font-size: 18px; }
+.card p { margin: 0; color: var(--dim); font-size: 14px; }
+.card ul { margin: 0; padding-left: 18px; color: var(--dim); font-size: 14px; display: grid; gap: 2px; }
+.go { font-family: var(--font-mono); font-size: 13px; color: var(--fg); }
+.go::after { content: " →"; color: var(--accent); }
+.swatch { height: 64px; border: 1px solid var(--line); }
+.v1 .swatch { background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--cool) 55%, transparent) 0 22px, color-mix(in srgb, var(--accent) 45%, transparent) 22px 44px, color-mix(in srgb, var(--accent) 20%, transparent) 44px 66px); }
+.v2 .swatch { background: radial-gradient(circle, var(--accent) 1.1px, transparent 1.6px) 0 0 / 7px 7px, radial-gradient(circle, var(--cool) 1px, transparent 1.6px) 3px 3px / 13px 13px; }
+footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer code { font-family: var(--font-mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Auditory localization sphere · versions</div>
+    <h1>听觉方位球</h1>
+    <p class="lede">同一个可视化的两个版本并列保存，内容和交互完全一样，区别在于“空间分辨能力”怎么画。挑一个打开展示即可。</p>
+  </header>
+  <section class="cards" aria-label="版本">
+    <a class="card v1" href="v1-heatmap/">
+      <div class="tag">v1<small>v1.0.0 · 2026-10-19</small></div>
+      <div class="swatch" aria-hidden="true"></div>
+      <h2>热力图 + 精度椭圆</h2>
+      <p>球面按定位误差上色，配合精度椭圆、声像偏移箭头和听感分区色块。</p>
+      <ul><li>适合讲“每个方向偏了多少、糊多大”</li><li>分区用色块和边界线表示</li></ul>
+      <span class="go">打开 v1</span>
+    </a>
+    <a class="card v2" href="v2-pointcloud/">
+      <div class="tag">v2<small>v2.0.0 · 2026-10-25</small></div>
+      <div class="swatch" aria-hidden="true"></div>
+      <h2>三维点云 + 写实头像</h2>
+      <p>点越密、越橙越准；模糊的方向点稀、发蓝、散成雾。切换系统时点云渐变，标签显示总点数。</p>
+      <ul><li>适合直接对比不同系统的整体解析力</li><li>低多边形写实头像，随视角转动</li></ul>
+      <span class="go">打开 v2</span>
+    </a>
+  </section>
+  <footer>两个版本都是单个 HTML 文件，也可以直接下载后双击打开：<code>v1-heatmap/index.html</code>、<code>v2-pointcloud/index.html</code>。版本说明见仓库里的 CHANGELOG.md。</footer>
+</main>
+</body>
+</html>
